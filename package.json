@@ -1,5 +1,5 @@
 {
-  "name": "file-upload",
+  "name": "@digital.gov/file-upload",
   "version": "0.1.1",
   "description": "file upload for digital.gov",
   "main": "index.node",
