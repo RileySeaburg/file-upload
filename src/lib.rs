@@ -1,0 +1,275 @@
+use aws_config::meta::region::RegionProviderChain;
+use aws_sdk_s3::config::Credentials;
+use aws_sdk_s3::config::Region;
+use aws_sdk_s3::primitives::ByteStream;
+use aws_sdk_s3::types::ObjectCannedAcl;
+use aws_sdk_s3::Client;
+use dotenv::dotenv;
+use image::imageops::FilterType;
+use lazy_static::lazy_static;
+use mime_guess::from_path as mime_from_path;
+use neon::prelude::*;
+use once_cell::sync::OnceCell;
+use std::collections::HashMap;
+use std::env;
+use std::error::Error;
+use std::ffi::OsStr;
+use std::fs;
+use std::path::Path;
+use tokio::runtime::Runtime;
+
+const REGION: &str = "us-east-1";
+const BUCKET_NAME: &str = "digitalgov";
+const INBOX_DIR: &str = "content/uploads/_working-images/to-process";
+const IMAGE_S3_PREFIX: &str = "";
+const STATIC_S3_PREFIX: &str = "static/";
+
+lazy_static! {
+    static ref VARIANT_SETTINGS: HashMap<&'static str, VariantSetting> = {
+        let mut m = HashMap::new();
+        m.insert("mobile", VariantSetting { width: 200, suffix: "_w200".to_string() });
+        m.insert("tablet", VariantSetting { width: 400, suffix: "_w400".to_string() });
+        m.insert("desktop_md", VariantSetting { width: 800, suffix: "_w800".to_string() });
+        m.insert("desktop_lg", VariantSetting { width: 1200, suffix: "_w1200".to_string() });
+        m.insert("original", VariantSetting { width: 0, suffix: "".to_string() }); // Add this line
+        m
+    };
+}
+
+struct VariantSetting {
+    width: u32,
+    suffix: String,
+}
+
+// Return a global tokio runtime or create one if it doesn't exist.
+fn runtime() -> &'static Runtime {
+    static RUNTIME: OnceCell<Runtime> = OnceCell::new();
+    RUNTIME.get_or_init(|| Runtime::new().expect("Failed to create Tokio runtime"))
+}
+
+fn is_image(file_path: &Path) -> bool {
+    file_path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map_or(false, |ext| {
+            matches!(
+                ext.to_lowercase().as_str(),
+                "png" | "jpg" | "jpeg" | "gif" | "bmp" | "tiff" | "webp"
+            )
+        })
+}
+
+fn is_valid_file_type(path: &Path) -> bool {
+    let extension = path
+        .extension()
+        .and_then(OsStr::to_str)
+        .unwrap_or("")
+        .to_lowercase();
+    matches!(
+        extension.as_str(),
+        // Images
+        "jpg" | "jpeg" | "png" | "gif" | "bmp" | "tiff" | "webp" |
+        // Documents
+        "doc" | "docx" | "pdf" | "txt" | "rtf" | 
+        "xls" | "xlsx" | "csv" |
+        "ppt" | "pptx" |
+        // Other common formats
+        "zip" | "rar" | "7z"
+    )
+}
+
+/// Resizes an image while maintaining its aspect ratio.
+pub fn resize_image(
+    image_path: &Path,
+    output_path: &Path,
+    width: u32,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    if width == 0 {
+        // If width is 0, it's the original size, so just copy the file
+        fs::copy(image_path, output_path)?;
+    } else {
+        let img = image::open(image_path)?;
+        let aspect_ratio = img.height() as f32 / img.width() as f32;
+        let height = (width as f32 * aspect_ratio).round() as u32;
+        let resized_img = img.resize_exact(width, height, FilterType::CatmullRom);
+        resized_img.save(output_path)?;
+    }
+    Ok(())
+}
+
+/// Uploads a file to an Amazon S3 bucket.
+
+pub async fn upload_to_s3(
+    file_path: &Path,
+    key: &str,
+    content_type: Option<&str>,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    println!("Attempting to upload file: {:?}", file_path);
+
+    // Load .env file
+    dotenv().ok();
+
+    let region_provider = RegionProviderChain::first_try(Region::new(REGION.to_string()))
+        .or_default_provider()
+        .or_else(Region::new("us-east-1"));
+
+    println!("Loading AWS config...");
+    let mut config_loader = aws_config::from_env().region(region_provider);
+
+    // Check for credentials in .env
+    if let (Ok(access_key), Ok(secret_key)) = (
+        env::var("AWS_ACCESS_KEY_ID"),
+        env::var("AWS_SECRET_ACCESS_KEY"),
+    ) {
+        println!("Using credentials from .env file");
+        let creds = Credentials::new(access_key, secret_key, None, None, "dotenv");
+        config_loader = config_loader.credentials_provider(creds);
+    } else {
+        println!("No credentials in .env, falling back to default credential provider chain");
+    }
+
+    let config = config_loader.load().await;
+
+    println!("Creating S3 client...");
+    let client = Client::new(&config);
+
+    let file = fs::read(file_path)?;
+    let stream = ByteStream::from(file);
+
+    let request = client
+        .put_object()
+        .bucket(BUCKET_NAME)
+        .key(key)
+        .body(stream)
+        .content_type(content_type.unwrap_or("application/octet-stream"))
+        .acl(ObjectCannedAcl::PublicRead);
+
+    println!("Uploading file: {:?} to S3 key: {}", file_path, key);
+    let response = request.send().await?;
+    println!("Uploaded file to S3: {:?}", response);
+    println!(
+        "Upload completed. File should be accessible at: https://s3.amazonaws.com/{}/{}",
+        BUCKET_NAME, key
+    );
+
+    Ok(())
+}
+pub async fn process_and_upload_file(
+    file_path: &Path,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let file_name = file_path.file_name().and_then(|s| s.to_str()).ok_or("Invalid file name")?;
+    let content_type = mime_from_path(file_path).first_raw();
+
+    if is_image(file_path) {
+        let file_stem = file_path.file_stem().and_then(|s| s.to_str()).ok_or("Invalid file name")?;
+        let extension = file_path.extension().and_then(|s| s.to_str()).ok_or("Invalid file extension")?;
+
+        for (_, variant) in VARIANT_SETTINGS.iter() {
+            let output_filename = format!("{}{}_{}.{}", file_stem, variant.suffix, variant.width, extension);
+            let output_path = Path::new(INBOX_DIR).join(&output_filename);
+            
+            resize_image(file_path, &output_path, variant.width)?;
+
+            let s3_key = format!("{}{}", IMAGE_S3_PREFIX, output_filename);
+            upload_to_s3(&output_path, &s3_key, content_type).await?;
+            println!("Uploaded resized file to S3: {}", s3_key);
+
+            fs::remove_file(output_path)?;
+        }
+
+        // Upload the original file last, without any suffix
+        let original_s3_key = format!("{}{}.{}", IMAGE_S3_PREFIX, file_stem, extension);
+        upload_to_s3(file_path, &original_s3_key, content_type).await?;
+        println!("Uploaded original file to S3: {}", original_s3_key);
+    } else {
+        let s3_key = format!("{}{}", STATIC_S3_PREFIX, file_name);
+        println!("Uploading file to S3: {}", s3_key);
+        upload_to_s3(file_path, &s3_key, content_type).await?;
+    }
+
+    // Remove the original file from the inbox
+    fs::remove_file(file_path)?;
+
+    Ok(())
+}
+
+async fn process_and_upload_all() -> Result<String, Box<dyn Error + Send + Sync>> {
+    let inbox = Path::new(INBOX_DIR);
+
+    if !inbox.exists() {
+        return Err(format!("Inbox directory not found at {:?}", inbox).into());
+    }
+
+    let files: Vec<_> = fs::read_dir(inbox)?
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| {
+            let path = entry.path();
+            path.is_file() && is_valid_file_type(&path)
+        })
+        .collect();
+
+    let file_count = files.len();
+    if file_count == 0 {
+        return Ok("No valid files to process.".into());
+    }
+
+    println!("Found {} valid files in inbox.", file_count);
+
+    let mut processed_count = 0;
+    for entry in files {
+        let path = entry.path();
+        match process_and_upload_file(&path).await {
+            Ok(_) => {
+                processed_count += 1;
+                println!("Successfully processed and uploaded: {:?}", path);
+            }
+            Err(e) => {
+                println!("Error processing file {:?}: {}", path, e);
+                // Continue with the next file
+            }
+        }
+    }
+
+    let remaining_files: Vec<_> = fs::read_dir(inbox)?
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| {
+            let path = entry.path();
+            path.is_file() && is_valid_file_type(&path)
+        })
+        .collect();
+
+    if !remaining_files.is_empty() {
+        println!(
+            "Warning: {} valid files remain in the inbox after processing.",
+            remaining_files.len()
+        );
+    }
+
+    // cleanup by removing the any remaining files in the inbox
+    for entry in remaining_files {
+        let path = entry.path();
+        fs::remove_file(path)?;
+    }
+
+    Ok(format!(
+        "Successfully processed and uploaded {} out of {} valid files.",
+        processed_count, file_count
+    ))
+}
+
+fn process_and_upload_js(mut cx: FunctionContext) -> JsResult<JsString> {
+    let result = runtime().block_on(async {
+        match process_and_upload_all().await {
+            Ok(message) => message,
+            Err(e) => format!("Error: {}", e),
+        }
+    });
+
+    Ok(cx.string(result))
+}
+
+#[neon::main]
+fn main(mut cx: ModuleContext) -> NeonResult<()> {
+    cx.export_function("upload", process_and_upload_js)?;
+    Ok(())
+}

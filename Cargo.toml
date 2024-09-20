@@ -1,0 +1,29 @@
+[package]
+name = "file_upload"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "file_upload"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "file_upload"
+path = "src/main.rs"
+required-features = ["binary"]
+
+[features]
+binary = ["tokio/full"]
+
+[dependencies]
+tokio = { version = "1.0", features = ["rt-multi-thread"] }
+aws-config = "0.55.0"
+aws-sdk-s3 = "0.25.0"
+image = "0.24"
+mime_guess = "2.0"
+dotenv = "0.15"
+once_cell = "1.17"
+lazy_static = "1.5.0"
+neon = "1"
+[dev-dependencies]
+tokio = { version = "1.0", features = ["full", "test-util"] }
