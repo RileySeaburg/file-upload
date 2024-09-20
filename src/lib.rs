@@ -21,6 +21,7 @@ use tokio::runtime::Runtime;
 const REGION: &str = "us-east-1";
 const BUCKET_NAME: &str = "digitalgov";
 const INBOX_DIR: &str = "content/uploads/_working-images/to-process";
+const FILE_INBOX_DIR: &str = "content/uploads/_working-files/to-process/";
 const IMAGE_S3_PREFIX: &str = "";
 const STATIC_S3_PREFIX: &str = "static/";
 
@@ -171,7 +172,6 @@ pub async fn upload_to_s3(
 
     Ok(())
 }
-
 pub async fn process_and_upload_file(
     file_path: &Path,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -201,8 +201,9 @@ pub async fn process_and_upload_file(
             fs::remove_file(output_path)?;
         }
     } else {
+        // For non-image files, upload directly to the STATIC_S3_PREFIX
         let s3_key = format!("{}{}", STATIC_S3_PREFIX, file_name);
-        println!("Uploading file to S3: {}", s3_key);
+        println!("Uploading non-image file to S3: {}", s3_key);
         upload_to_s3(file_path, &s3_key, content_type).await?;
     }
 
@@ -210,73 +211,73 @@ pub async fn process_and_upload_file(
 }
 
 async fn process_and_upload_all() -> Result<String, Box<dyn Error + Send + Sync>> {
-    let inbox = Path::new(INBOX_DIR);
+    let image_inbox = Path::new(INBOX_DIR);
+    let file_inbox = Path::new(FILE_INBOX_DIR);
 
-    if !inbox.exists() {
-        return Err(format!("Inbox directory not found at {:?}", inbox).into());
-    }
-
-    let files: Vec<_> = fs::read_dir(inbox)?
-        .filter_map(|entry| entry.ok())
-        .filter(|entry| {
-            let path = entry.path();
-            path.is_file() && is_valid_file_type(&path)
-        })
-        .collect();
-
-    let file_count = files.len();
-    if file_count == 0 {
-        return Ok("No valid files to process.".into());
-    }
-
-    println!("Found {} valid files in inbox.", file_count);
-
+    let mut total_count = 0;
     let mut processed_count = 0;
-    for entry in files {
-        let path = entry.path();
-        match process_and_upload_file(&path).await {
-            Ok(_) => {
-                processed_count += 1;
-                println!("Successfully processed and uploaded: {:?}", path);
-            }
-            Err(e) => {
-                println!("Error processing file {:?}: {}", path, e);
-                // Continue with the next file
+
+    for inbox in &[image_inbox, file_inbox] {
+        if !inbox.exists() {
+            println!("Inbox directory not found at {:?}", inbox);
+            continue;
+        }
+
+        let files: Vec<_> = fs::read_dir(inbox)?
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| {
+                let path = entry.path();
+                path.is_file() && is_valid_file_type(&path)
+            })
+            .collect();
+
+        total_count += files.len();
+
+        println!("Found {} valid files in inbox {:?}.", files.len(), inbox);
+
+        for entry in files {
+            let path = entry.path();
+            match process_and_upload_file(&path).await {
+                Ok(_) => {
+                    processed_count += 1;
+                    println!("Successfully processed and uploaded: {:?}", path);
+                    // Remove the original file after successful upload
+                    if let Err(e) = fs::remove_file(&path) {
+                        println!("Error removing file {:?}: {}", path, e);
+                    }
+                }
+                Err(e) => {
+                    println!("Error processing file {:?}: {}", path, e);
+                    // Continue with the next file
+                }
             }
         }
     }
 
-    let remaining_files: Vec<_> = fs::read_dir(inbox)?
-        .filter_map(|entry| entry.ok())
-        .filter(|entry| {
-            let path = entry.path();
-            path.is_file() && is_valid_file_type(&path)
-        })
-        .collect();
-
-    if !remaining_files.is_empty() {
-        println!(
-            "Warning: {} valid files remain in the inbox after processing.",
-            remaining_files.len()
-        );
+    if total_count == 0 {
+        return Ok("No valid files to process.".into());
     }
 
-    // cleanup by removing the any remaining files in the inbox
-    for entry in remaining_files {
-        let path = entry.path();
-        fs::remove_file(path)?;
-    }
+    // Cleanup: remove working directories
+    let directories_to_remove = [
+        Path::new("content/uploads/_working-images"),
+        Path::new("content/uploads/_working-files"),
+    ];
 
-    // remove the working images directory
-    let directory_to_remove = Path::new("content/uploads/_working-images");
-    fs::remove_dir_all(directory_to_remove)?;
-    
+    for dir in &directories_to_remove {
+        if dir.exists() {
+            if let Err(e) = fs::remove_dir_all(dir) {
+                println!("Error removing directory {:?}: {}", dir, e);
+            }
+        }
+    }
 
     Ok(format!(
         "Successfully processed and uploaded {} out of {} valid files.",
-        processed_count, file_count
+        processed_count, total_count
     ))
 }
+
 
 fn process_and_upload_js(mut cx: FunctionContext) -> JsResult<JsString> {
     let result = runtime().block_on(async {
