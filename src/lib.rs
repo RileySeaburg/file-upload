@@ -267,6 +267,11 @@ async fn process_and_upload_all() -> Result<String, Box<dyn Error + Send + Sync>
         fs::remove_file(path)?;
     }
 
+    // remove the working images directory
+    let directory_to_remove = Path::new("content/uploads/_working-images");
+    fs::remove_dir_all(directory_to_remove)?;
+    
+
     Ok(format!(
         "Successfully processed and uploaded {} out of {} valid files.",
         processed_count, file_count
