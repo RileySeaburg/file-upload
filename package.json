@@ -1,6 +1,6 @@
 {
   "name": "file-upload",
-  "version": "0.1.6",
+  "version": "0.1.1",
   "description": "file upload for digital.gov",
   "main": "index.node",
   "scripts": {
@@ -14,7 +14,11 @@
     "cross": "npm run cross-build -- --release",
     "install:binary": "cargo-cp-artifact -nc index.node -- cargo build --message-format=json-render-diagnostics"
   },
-  "author": "",
+  "author": "Riley Seaburg",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/RileySeaburg/file-upload"
+  },
   "license": "MIT",
   "devDependencies": {
     "@neon-rs/cli": "0.1.81"

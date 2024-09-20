@@ -27,11 +27,34 @@ const STATIC_S3_PREFIX: &str = "static/";
 lazy_static! {
     static ref VARIANT_SETTINGS: HashMap<&'static str, VariantSetting> = {
         let mut m = HashMap::new();
-        m.insert("mobile", VariantSetting { width: 200, suffix: "_w200".to_string() });
-        m.insert("tablet", VariantSetting { width: 400, suffix: "_w400".to_string() });
-        m.insert("desktop_md", VariantSetting { width: 800, suffix: "_w800".to_string() });
-        m.insert("desktop_lg", VariantSetting { width: 1200, suffix: "_w1200".to_string() });
-        m.insert("original", VariantSetting { width: 0, suffix: "".to_string() }); // Add this line
+        m.insert(
+            "mobile",
+            VariantSetting {
+                width: 200,
+                suffix: "_w200".to_string(),
+            },
+        );
+        m.insert(
+            "tablet",
+            VariantSetting {
+                width: 400,
+                suffix: "_w400".to_string(),
+            },
+        );
+        m.insert(
+            "desktop_md",
+            VariantSetting {
+                width: 800,
+                suffix: "_w800".to_string(),
+            },
+        );
+        m.insert(
+            "desktop_lg",
+            VariantSetting {
+                width: 1200,
+                suffix: "_w1200".to_string(),
+            },
+        );
         m
     };
 }
@@ -84,16 +107,11 @@ pub fn resize_image(
     output_path: &Path,
     width: u32,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    if width == 0 {
-        // If width is 0, it's the original size, so just copy the file
-        fs::copy(image_path, output_path)?;
-    } else {
-        let img = image::open(image_path)?;
-        let aspect_ratio = img.height() as f32 / img.width() as f32;
-        let height = (width as f32 * aspect_ratio).round() as u32;
-        let resized_img = img.resize_exact(width, height, FilterType::CatmullRom);
-        resized_img.save(output_path)?;
-    }
+    let img = image::open(image_path)?;
+    let aspect_ratio = img.height() as f32 / img.width() as f32;
+    let height = (width as f32 * aspect_ratio).round() as u32;
+    let resized_img = img.resize_exact(width, height, FilterType::CatmullRom);
+    resized_img.save(output_path)?;
     Ok(())
 }
 
@@ -145,8 +163,7 @@ pub async fn upload_to_s3(
         .acl(ObjectCannedAcl::PublicRead);
 
     println!("Uploading file: {:?} to S3 key: {}", file_path, key);
-    let response = request.send().await?;
-    println!("Uploaded file to S3: {:?}", response);
+    request.send().await?; 
     println!(
         "Upload completed. File should be accessible at: https://s3.amazonaws.com/{}/{}",
         BUCKET_NAME, key
@@ -154,6 +171,7 @@ pub async fn upload_to_s3(
 
     Ok(())
 }
+
 pub async fn process_and_upload_file(
     file_path: &Path,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -164,6 +182,12 @@ pub async fn process_and_upload_file(
         let file_stem = file_path.file_stem().and_then(|s| s.to_str()).ok_or("Invalid file name")?;
         let extension = file_path.extension().and_then(|s| s.to_str()).ok_or("Invalid file extension")?;
 
+        // Upload the original file first
+        let original_s3_key = format!("{}{}.{}", IMAGE_S3_PREFIX, file_stem, extension);
+        upload_to_s3(file_path, &original_s3_key, content_type).await?;
+        println!("Uploaded original file to S3: {}", original_s3_key);
+
+        // Then process and upload resized versions
         for (_, variant) in VARIANT_SETTINGS.iter() {
             let output_filename = format!("{}{}_{}.{}", file_stem, variant.suffix, variant.width, extension);
             let output_path = Path::new(INBOX_DIR).join(&output_filename);
@@ -176,19 +200,11 @@ pub async fn process_and_upload_file(
 
             fs::remove_file(output_path)?;
         }
-
-        // Upload the original file last, without any suffix
-        let original_s3_key = format!("{}{}.{}", IMAGE_S3_PREFIX, file_stem, extension);
-        upload_to_s3(file_path, &original_s3_key, content_type).await?;
-        println!("Uploaded original file to S3: {}", original_s3_key);
     } else {
         let s3_key = format!("{}{}", STATIC_S3_PREFIX, file_name);
         println!("Uploading file to S3: {}", s3_key);
         upload_to_s3(file_path, &s3_key, content_type).await?;
     }
-
-    // Remove the original file from the inbox
-    fs::remove_file(file_path)?;
 
     Ok(())
 }
