@@ -25,5 +25,8 @@
   },
   "dependencies": {
     "cargo-cp-artifact": "^0.1.9"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
