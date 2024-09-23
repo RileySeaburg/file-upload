@@ -1,6 +1,6 @@
 {
   "name": "@evolvingriley/file-upload",
-  "version": "0.1.3",
+  "version": "0.1.3-a",
   "description": "file upload for digital.gov",
   "main": "index.node",
   "scripts": {
@@ -11,7 +11,7 @@
     "postcross-build": "neon dist -m /target < cross.log",
     "debug": "npm run cargo-build --",
     "build": "npm run cargo-build -- --release",
-    "cross": "npm run cross-build -- --release",
+    "cross": "npm run cross-build -- --release --target x86_64-unknown-linux-gnu",
     "install:binary": "cargo-cp-artifact -nc index.node -- cargo build --message-format=json-render-diagnostics"
   },
   "author": "Riley Seaburg",
