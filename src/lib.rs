@@ -25,44 +25,29 @@ const FILE_INBOX_DIR: &str = "content/uploads/_working-files/to-process/";
 const IMAGE_S3_PREFIX: &str = "";
 const STATIC_S3_PREFIX: &str = "static/";
 
+// Image variant settings
 lazy_static! {
     static ref VARIANT_SETTINGS: HashMap<&'static str, VariantSetting> = {
         let mut m = HashMap::new();
         m.insert(
-            "mobile",
-            VariantSetting {
-                width: 200,
-                suffix: "_w200".to_string(),
-            },
-        );
-        m.insert(
-            "tablet",
-            VariantSetting {
-                width: 400,
-                suffix: "_w400".to_string(),
-            },
-        );
-        m.insert(
             "desktop_md",
             VariantSetting {
                 width: 800,
-                suffix: "_w800".to_string(),
             },
         );
         m.insert(
             "desktop_lg",
             VariantSetting {
-                width: 1200,
-                suffix: "_w1200".to_string(),
+                width: 1200
             },
         );
         m
     };
 }
 
+/// Settings for an image variant.
 struct VariantSetting {
-    width: u32,
-    suffix: String,
+    width: u32
 }
 
 // Return a global tokio runtime or create one if it doesn't exist.
@@ -166,7 +151,7 @@ pub async fn upload_to_s3(
     println!("Uploading file: {:?} to S3 key: {}", file_path, key);
     request.send().await?; 
     println!(
-        "Upload completed. File should be accessible at: https://s3.amazonaws.com/{}/{}",
+        "Upload completed. File should be accessible at: https://s3.am~azonaws.com/{}/{}",
         BUCKET_NAME, key
     );
 
@@ -189,7 +174,7 @@ pub async fn process_and_upload_file(
 
         // Then process and upload resized versions
         for (_, variant) in VARIANT_SETTINGS.iter() {
-            let output_filename = format!("{}{}_{}.{}", file_stem, variant.suffix, variant.width, extension);
+            let output_filename = format!("{}w_{}.{}", file_stem, variant.width, extension);
             let output_path = Path::new(INBOX_DIR).join(&output_filename);
             
             resize_image(file_path, &output_path, variant.width)?;

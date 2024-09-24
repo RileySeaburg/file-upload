@@ -1,18 +1,23 @@
 {
   "name": "@evolvingriley/file-upload",
-  "version": "0.1.4-alpha.1",
+  "version": "0.1.4-alpha.4",
   "description": "file upload for digital.gov",
   "main": "index.js",
   "scripts": {
     "test": "cargo test",
-    "build": "cargo-cp-artifact -nc index.node -- cargo build --message-format=json-render-diagnostics --release",
+    "build": "node ./build-all-platforms.js",
     "build:debug": "cargo-cp-artifact -nc index.node -- cargo build --message-format=json-render-diagnostics",
-    "build:linux": "cross build --target x86_64-unknown-linux-musl --release && neon dist -m target/x86_64-unknown-linux-musl/release",
-    "build:all": "node ./build-all-platforms.js",
-    "postcargo-build": "neon dist < cargo.log",
-    "postcross-build": "neon dist -m /target < cross.log",
-    "install:binary": "cargo-cp-artifact -nc index.node -- cargo build --message-format=json-render-diagnostics",
-    "install": "npm run build"
+    "build:linux": "cross build --target x86_64-unknown-linux-gnu --release",
+    "build:macos": "cargo build --target x86_64-apple-darwin --release && cargo build --target aarch64-apple-darwin --release",
+    "package": "node ./package-all-platforms.js",
+    "install": "node-pre-gyp install --fallback-to-build || npm run build"
+  },
+  "binary": {
+    "module_name": "index",
+    "module_path": "./native/{platform}-{arch}/",
+    "remote_path": "./releases/download/v{version}/",
+    "package_name": "{module_name}-v{version}-{platform}-{arch}.tar.gz",
+    "host": "https://github.com/RileySeaburg/file-upload/releases/download/"
   },
   "author": "Riley Seaburg",
   "repository": {
@@ -21,17 +26,16 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "@neon-rs/cli": "0.1.81"
+    "@neon-rs/cli": "0.1.81",
+    "cross": "^1.0.0"
   },
   "dependencies": {
+    "@mapbox/node-pre-gyp": "^1.0.0",
     "cargo-cp-artifact": "^0.1.9"
   },
   "files": [
     "index.js",
-    "index.node",
-    "file-upload.linux-x64-gnu.node",
-    "file-upload.darwin-x64.node",
-    "file-upload.win32-x64-msvc.node"
+    "native/**/*"
   ],
   "publishConfig": {
     "access": "public"
