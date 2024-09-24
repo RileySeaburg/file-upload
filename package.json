@@ -1,15 +1,17 @@
 {
   "name": "@evolvingriley/file-upload",
-  "version": "0.1.4",
+  "version": "0.1.4a -alpha.1",
   "description": "file upload for digital.gov",
   "main": "index.js",
   "scripts": {
     "test": "cargo test",
-    "build": "neon build --release",
-    "build:all": "npm run build:linux && npm run build:macos && npm run build:windows",
-    "build:linux": "cross build --target x86_64-unknown-linux-gnu --release && neon dist",
-    "build:macos": "cross build --target x86_64-apple-darwin --release && neon dist",
-    "build:windows": "cross build --target x86_64-pc-windows-msvc --release && neon dist",
+    "build": "cargo-cp-artifact -nc index.node -- cargo build --message-format=json-render-diagnostics --release",
+    "build:debug": "cargo-cp-artifact -nc index.node -- cargo build --message-format=json-render-diagnostics",
+    "build:linux": "cross build --target x86_64-unknown-linux-musl --release && neon dist -m target/x86_64-unknown-linux-musl/release",
+    "build:all": "node ./build-all-platforms.js",
+    "postcargo-build": "neon dist < cargo.log",
+    "postcross-build": "neon dist -m /target < cross.log",
+    "install:binary": "cargo-cp-artifact -nc index.node -- cargo build --message-format=json-render-diagnostics",
     "install": "npm run build"
   },
   "author": "Riley Seaburg",
@@ -19,8 +21,7 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "@neon-rs/cli": "0.1.81",
-    "cross": "^2.1.0"
+    "@neon-rs/cli": "0.1.81"
   },
   "dependencies": {
     "cargo-cp-artifact": "^0.1.9"
