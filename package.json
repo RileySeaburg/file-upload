@@ -1,18 +1,18 @@
 {
   "name": "@evolvingriley/file-upload",
-  "version": "0.1.3",
+  "version": "0.1.4a -alpha.1",
   "description": "file upload for digital.gov",
-  "main": "index.node",
+  "main": "index.js",
   "scripts": {
     "test": "cargo test",
-    "cargo-build": "cargo build --message-format=json > cargo.log",
-    "cross-build": "cross build --message-format=json > cross.log",
+    "build": "cargo-cp-artifact -nc index.node -- cargo build --message-format=json-render-diagnostics --release",
+    "build:debug": "cargo-cp-artifact -nc index.node -- cargo build --message-format=json-render-diagnostics",
+    "build:linux": "cross build --target x86_64-unknown-linux-musl --release && neon dist -m target/x86_64-unknown-linux-musl/release",
+    "build:all": "node ./build-all-platforms.js",
     "postcargo-build": "neon dist < cargo.log",
     "postcross-build": "neon dist -m /target < cross.log",
-    "debug": "npm run cargo-build --",
-    "build": "npm run cargo-build -- --release",
-    "cross": "npm run cross-build -- --release",
-    "install:binary": "cargo-cp-artifact -nc index.node -- cargo build --message-format=json-render-diagnostics"
+    "install:binary": "cargo-cp-artifact -nc index.node -- cargo build --message-format=json-render-diagnostics",
+    "install": "npm run build"
   },
   "author": "Riley Seaburg",
   "repository": {
@@ -26,6 +26,13 @@
   "dependencies": {
     "cargo-cp-artifact": "^0.1.9"
   },
+  "files": [
+    "index.js",
+    "index.node",
+    "file-upload.linux-x64-gnu.node",
+    "file-upload.darwin-x64.node",
+    "file-upload.win32-x64-msvc.node"
+  ],
   "publishConfig": {
     "access": "public"
   }
