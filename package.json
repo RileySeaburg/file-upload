@@ -1,8 +1,8 @@
 {
   "name": "@evolvingriley/file-upload",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "file upload for digital.gov",
-  "main": "index.node",
+  "main": "index.js",
   "scripts": {
     "test": "cargo test",
     "cargo-build": "cargo build --message-format=json > cargo.log",
