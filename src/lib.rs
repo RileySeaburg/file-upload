@@ -174,7 +174,7 @@ pub async fn process_and_upload_file(
 
         // Then process and upload resized versions
         for (_, variant) in VARIANT_SETTINGS.iter() {
-            let output_filename = format!("{}w_{}.{}", file_stem, variant.width, extension);
+            let output_filename = format!("{}_w{}.{}", file_stem, variant.width, extension);
             let output_path = Path::new(INBOX_DIR).join(&output_filename);
             
             resize_image(file_path, &output_path, variant.width)?;
