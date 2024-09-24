@@ -5,14 +5,12 @@
   "main": "index.js",
   "scripts": {
     "test": "cargo test",
-    "cargo-build": "cargo build --message-format=json > cargo.log",
-    "cross-build": "cross build --message-format=json > cross.log",
-    "postcargo-build": "neon dist < cargo.log",
-    "postcross-build": "neon dist -m /target < cross.log",
-    "debug": "npm run cargo-build --",
-    "build": "npm run cargo-build -- --release",
-    "cross": "npm run cross-build -- --release",
-    "install:binary": "cargo-cp-artifact -nc index.node -- cargo build --message-format=json-render-diagnostics"
+    "build": "neon build --release",
+    "build:all": "npm run build:linux && npm run build:macos && npm run build:windows",
+    "build:linux": "cross build --target x86_64-unknown-linux-gnu --release && neon dist",
+    "build:macos": "cross build --target x86_64-apple-darwin --release && neon dist",
+    "build:windows": "cross build --target x86_64-pc-windows-msvc --release && neon dist",
+    "install": "npm run build"
   },
   "author": "Riley Seaburg",
   "repository": {
@@ -21,11 +19,19 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "@neon-rs/cli": "0.1.81"
+    "@neon-rs/cli": "0.1.81",
+    "cross": "^2.1.0"
   },
   "dependencies": {
     "cargo-cp-artifact": "^0.1.9"
   },
+  "files": [
+    "index.js",
+    "index.node",
+    "file-upload.linux-x64-gnu.node",
+    "file-upload.darwin-x64.node",
+    "file-upload.win32-x64-msvc.node"
+  ],
   "publishConfig": {
     "access": "public"
   }
