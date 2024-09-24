@@ -151,7 +151,7 @@ pub async fn upload_to_s3(
     println!("Uploading file: {:?} to S3 key: {}", file_path, key);
     request.send().await?; 
     println!(
-        "Upload completed. File should be accessible at: https://s3.am~azonaws.com/{}/{}",
+        "Upload completed. File should be accessible at: https://s3.amazonaws.com/{}/{}",
         BUCKET_NAME, key
     );
 
