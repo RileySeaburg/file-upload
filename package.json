@@ -1,6 +1,6 @@
 {
   "name": "@evolvingriley/file-upload",
-  "version": "0.1.6",
+  "version": "0.1.7-alpha",
   "description": "file upload for digital.gov",
   "main": "index.js",
   "scripts": {
