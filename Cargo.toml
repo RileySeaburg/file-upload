@@ -1,6 +1,6 @@
 [package]
 name = "file_upload"
-version = "0.1.5"
+version = "0.1.8"
 description = "A Neon library for uploading files"
 license = "MIT"
 edition = "2021"
